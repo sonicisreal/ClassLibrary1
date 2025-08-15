@@ -5,7 +5,7 @@ using StardewModdingAPI.Events;
 using StardewValley;
 using System.Collections.Generic;
 
-namespace MyTimePauseMod
+namespace ClassLibrary1
 {
     public class ModEntry : Mod
     {
