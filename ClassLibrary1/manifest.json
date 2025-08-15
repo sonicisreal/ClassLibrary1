@@ -1,0 +1,10 @@
+{
+    "Name": "ClassLibrary1",
+    "Author": "sonicfankyle14",
+    "Version": "1.0.0",
+    "Description": "I'm gay'",
+    "UniqueID": "sonicfankyle14.ClassLibrary1",
+    "EntryDll": "ClassLibrary1.dll",
+    "MinimumApiVersion": "4.0.0",
+    "UpdateKeys": []
+}
