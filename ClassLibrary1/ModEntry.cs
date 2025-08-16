@@ -114,14 +114,25 @@ namespace PauseTimeMP
         }
 
         // -------- host: enforce global pauses --------
-        public static void ShouldTimePassPostfix(ref bool __result /*, bool ignoreMultiplayer */)
+        public static void ShouldTimePassPostfix(ref bool __result)
         {
-            if (!Context.IsMainPlayer) return;
+            if (!Context.IsMainPlayer)
+                return;
 
-            // vanilla already considers the host's own menu/dialog; we add remote menus:
-            if (MenuPauseRequests.Count > 0)
+            // host-local pause conditions (menus, events, minigames, etc.)
+            bool hostPaused =
+                   Game1.activeClickableMenu is not null
+                || Game1.eventUp
+                || Game1.currentMinigame is not null
+                || Game1.isFestival()
+                || Game1.farmEvent is not null
+                || Game1.paused;
+
+            // if host is paused OR any client requested a pause, stop time
+            if (hostPaused || MenuPauseRequests.Count > 0)
                 __result = false;
         }
+
 
         // -------- host: slow accumulation when ANYONE is in Skull Cave --------
         private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
