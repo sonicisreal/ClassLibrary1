@@ -34,7 +34,8 @@ namespace ClassLibrary1
             if (Context.IsMainPlayer)
                 return;
 
-            bool paused = e.NewMenu != null;
+            // Do not signal when on TitleMenu to avoid pausing hosts during joins/loads.
+            bool paused = e.NewMenu is not null && e.NewMenu is not TitleMenu;
             this.Helper.Multiplayer.SendMessage(
                 new PauseRequest(Game1.player.UniqueMultiplayerID, paused),
                 "MenuPause",
@@ -81,39 +82,20 @@ namespace ClassLibrary1
             if (!Context.IsMainPlayer)
                 return;
 
-            bool pause = false;
+            // Pause for global blockers and the host's own UI
+            bool pause =
+                   Game1.eventUp
+                || Game1.currentMinigame is not null
+                || Game1.isFestival()
+                || Game1.farmEvent is not null
+                || Game1.paused
+                || Game1.activeClickableMenu is not null
+                || Game1.dialogueUp;
 
-            // Global/host-local blockers
-            pause |= Game1.eventUp
-                  || Game1.currentMinigame != null
-                  || Game1.isFestival()
-                  || Game1.farmEvent != null
-                  || Game1.paused
-                  || Game1.activeClickableMenu != null; // host's own menu
-
-            // Any synced per-player states that should pause time
-            if (!pause)
-            {
-                foreach (Farmer f in Game1.getAllFarmers())
-                {
-                    if (f == null) continue;
-
-                    if (f.isInBed.Value
-                        || f.UsingTool
-                        || f.isEating
-                        || f.isEmoting)
-                    {
-                        pause = true;
-                        break;
-                    }
-                }
-            }
-
-            // Any client reported a pause-only state (like having a menu open)
+            // Pause if any client reported a menu open
             if (!pause && MenuPauseRequests.Count > 0)
                 pause = true;
 
-            // If any condition says "pause", the host says time should not pass.
             if (pause)
                 __result = false;
         }
