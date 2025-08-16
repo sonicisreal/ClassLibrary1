@@ -9,27 +9,58 @@ namespace ClassLibrary1
 {
     public class ModEntry : Mod
     {
-        private bool isTimePaused = false;
 
         public override void Entry(IModHelper helper)
         {
-            helper.Events.GameLoop.TimeChanged += this.OnTimeChanged;
+            helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
+            helper.Events.Multiplayer.ModMessageReceived += this.OnModMessageReceived;
         }
-        private void OnTimeChanged(object sender, TimeChangedEventArgs e)
+
+        private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
         {
+            if (!Context.IsMainPlayer || !Game1.hasLoadedGame || Game1.isFestival() || Game1.eventUp || Game1.farmEvent != null)
+                return;
+            bool shouldPause = false;
             foreach (Farmer player in Game1.getAllFarmers())
             {
-                bool shouldPause = this.ShouldPauseForPlayer(player);
-                if (shouldPause != this.isTimePaused)
-                {
-                    this.isTimePaused = shouldPause;
-                    Game1.timeOfDay = e.OldTime;
-                } 
+                shouldPause = this.ShouldPauseForPlayer(player);
+                if (shouldPause)
+                    break;
             }
 
+            if (shouldPause)
+            {
+                Game1.gameTimeInterval = 0;
+            } else
+            {
+                foreach (Farmer player in Game1.getAllFarmers()) {
+                    if (player.currentLocation != null && player.currentLocation.Name == "SkullCavern")
+                    {
+                        Game1.gameTimeInterval = 8000;
+                        return;
+                    }
+                }
+                Game1.gameTimeInterval = 7000;
+            }
+            int newTime = Game1.timeOfDay;
+            this.Helper.Multiplayer.SendMessage(
+                newTime,
+                "SyncTime",
+                modIDs: new[] { this.ModManifest.UniqueID }
+                );
+                
+            
         }
 
-
+        private void OnModMessageReceived(object sender, ModMessageReceivedEventArgs e)
+        {
+            if (e.FromModID == this.ModManifest.UniqueID && e.Type == "SyncTime")
+            {
+                int syncedTime = e.ReadAs<int>();
+                if (!Context.IsMainPlayer)
+                    Game1.timeOfDay = syncedTime;
+            }
+        }
         private bool ShouldPauseForPlayer(Farmer player)
         {
             return player.CurrentTool != null && player.UsingTool ||
@@ -43,10 +74,5 @@ namespace ClassLibrary1
                    player.isEating ||
                    Game1.paused;
         }
-
-
-        
-
-       
     }
 }
