@@ -13,35 +13,22 @@ namespace ClassLibrary1
 
         public override void Entry(IModHelper helper)
         {
-            helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
+            helper.Events.GameLoop.TimeChanged += this.OnTimeChanged;
         }
-
-        private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
+        private void OnTimeChanged(object sender, TimeChangedEventArgs e)
         {
-            if (!Context.IsWorldReady || !Context.IsMultiplayer)
-                return;
-            if (!Context.IsMultiplayer)
+            foreach (Farmer player in Game1.getAllFarmers())
             {
-                this.Monitor.Log($"{e}", LogLevel.Debug);
-                return;
-            }
-
-            bool shouldPause = false;
-            foreach (Farmer player in Game1.getOnlineFarmers())
-            {
-                if (ShouldPauseForPlayer(player))
+                bool shouldPause = this.ShouldPauseForPlayer(player);
+                if (shouldPause != this.isTimePaused)
                 {
-                    shouldPause = true;
-                    break;
-                }
+                    this.isTimePaused = shouldPause;
+                    Game1.timeOfDay = e.OldTime;
+                } 
             }
 
-            if (Context.IsMainPlayer && shouldPause != isTimePaused)
-            {
-                isTimePaused = shouldPause;
-                UpdateTimePause(shouldPause);
-            }
         }
+
 
         private bool ShouldPauseForPlayer(Farmer player)
         {
@@ -60,21 +47,6 @@ namespace ClassLibrary1
 
         
 
-        private void UpdateTimePause(bool shouldPause)
-        {
-            if (shouldPause)
-            {
-                Game1.gameTimeInterval = 0; 
-            }
-            else
-            {
-                Game1.gameTimeInterval = 7000;
-            }
-        }
-    }
-
-    public class PauseMessage
-    {
-        public bool ShouldPause { get; set; }
+       
     }
 }
