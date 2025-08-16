@@ -1,78 +1,121 @@
 ﻿using System;
+using System.Collections.Generic;
+using HarmonyLib;
 using Microsoft.Xna.Framework;  
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
-using System.Collections.Generic;
+using StardewValley.Events;
+using StardewValley.Menus;
+using StardewValley.Network;
 
 namespace ClassLibrary1
 {
     public class ModEntry : Mod
     {
-
         public override void Entry(IModHelper helper)
         {
-            helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
+            var harmony = new Harmony(this.ModManifest.UniqueID);
+            var original = AccessTools.Method(typeof(Game1), nameof(Game1.shouldTimePass));
+            harmony.Patch(
+                original: original,
+                postfix: new HarmonyMethod(typeof(Game1Patches), nameof(Game1Patches.ShouldTimePassPostfix))
+            );
+
+            // Messaging to communicate client-only pause states (e.g., menus) to the host.
+            helper.Events.Display.MenuChanged += this.OnMenuChanged;
             helper.Events.Multiplayer.ModMessageReceived += this.OnModMessageReceived;
+            helper.Events.Multiplayer.PeerDisconnected += this.OnPeerDisconnected;
         }
 
-        private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
+        private void OnMenuChanged(object? sender, MenuChangedEventArgs e)
         {
-            if (!Context.IsMainPlayer || !Game1.hasLoadedGame || Game1.isFestival() || Game1.eventUp || Game1.farmEvent != null)
+            // Only clients need to tell the host about their menu state.
+            if (Context.IsMainPlayer)
                 return;
-            bool shouldPause = false;
-            foreach (Farmer player in Game1.getAllFarmers())
-            {
-                shouldPause = this.ShouldPauseForPlayer(player);
-                if (shouldPause)
-                    break;
-            }
 
-            if (shouldPause)
+            bool paused = e.NewMenu != null;
+            this.Helper.Multiplayer.SendMessage(
+                new PauseRequest(Game1.player.UniqueMultiplayerID, paused),
+                "MenuPause",
+                modIDs: new[] { this.ModManifest.UniqueID }
+            );
+        }
+
+        private void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
+        {
+            if (!Context.IsMainPlayer || e.FromModID != this.ModManifest.UniqueID)
+                return;
+
+            if (e.Type == "MenuPause")
             {
-                Game1.gameTimeInterval = 0;
-            } else
+                var msg = e.ReadAs<PauseRequest>();
+                if (msg.Paused)
+                    Game1Patches.MenuPauseRequests.Add(msg.PlayerId);
+                else
+                    Game1Patches.MenuPauseRequests.Remove(msg.PlayerId);
+            }
+        }
+
+        private void OnPeerDisconnected(object? sender, PeerDisconnectedEventArgs e)
+        {
+            if (!Context.IsMainPlayer)
+                return;
+
+            Game1Patches.MenuPauseRequests.Remove(e.Peer.PlayerID);
+        }
+    }
+
+    // Tiny payload for client→host pause requests.
+    public readonly record struct PauseRequest(long PlayerId, bool Paused);
+
+    public static class Game1Patches
+    {
+        // Tracks which clients requested a pause (e.g., they have a menu open).
+        internal static readonly HashSet<long> MenuPauseRequests = new();
+
+        // Postfix so we preserve vanilla conditions and add our "pause for any player" rule.
+        public static void ShouldTimePassPostfix(ref bool __result)
+        {
+            // Only the host decides whether time advances.
+            if (!Context.IsMainPlayer)
+                return;
+
+            bool pause = false;
+
+            // Global/host-local blockers
+            pause |= Game1.eventUp
+                  || Game1.currentMinigame != null
+                  || Game1.isFestival()
+                  || Game1.farmEvent != null
+                  || Game1.paused
+                  || Game1.activeClickableMenu != null; // host's own menu
+
+            // Any synced per-player states that should pause time
+            if (!pause)
             {
-                foreach (Farmer player in Game1.getAllFarmers()) {
-                    if (player.currentLocation != null && player.currentLocation.Name == "SkullCavern")
+                foreach (Farmer f in Game1.getAllFarmers())
+                {
+                    if (f == null) continue;
+
+                    if (f.isInBed.Value
+                        || f.UsingTool
+                        || f.isEating
+                        || f.isEmoting)
                     {
-                        Game1.gameTimeInterval = 8000;
-                        return;
+                        pause = true;
+                        break;
                     }
                 }
-                Game1.gameTimeInterval = 7000;
             }
-            int newTime = Game1.timeOfDay;
-            this.Helper.Multiplayer.SendMessage(
-                newTime,
-                "SyncTime",
-                modIDs: new[] { this.ModManifest.UniqueID }
-                );
-                
-            
-        }
 
-        private void OnModMessageReceived(object sender, ModMessageReceivedEventArgs e)
-        {
-            if (e.FromModID == this.ModManifest.UniqueID && e.Type == "SyncTime")
-            {
-                int syncedTime = e.ReadAs<int>();
-                if (!Context.IsMainPlayer)
-                    Game1.timeOfDay = syncedTime;
-            }
-        }
-        private bool ShouldPauseForPlayer(Farmer player)
-        {
-            return player.CurrentTool != null && player.UsingTool ||
-                   Game1.activeClickableMenu != null && player.Equals(Game1.player) ||
-                   player.isInBed.Value ||
-                   Game1.eventUp ||
-                   Game1.currentMinigame != null ||
-                   Game1.isFestival() ||
-                   Game1.farmEvent != null ||
-                   player.isEmoting ||
-                   player.isEating ||
-                   Game1.paused;
+            // Any client reported a pause-only state (like having a menu open)
+            if (!pause && MenuPauseRequests.Count > 0)
+                pause = true;
+
+            // If any condition says "pause", the host says time should not pass.
+            if (pause)
+                __result = false;
         }
     }
 }

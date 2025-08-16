@@ -1,14 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-	<Gamepath>C:\Program Files (x86)\Steam\steamapps\common\Stardew Valley</Gamepath>
-  </PropertyGroup>
+	<PropertyGroup>
+		<EnableHarmony>true</EnableHarmony>
+		<TargetFramework>net6.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<Gamepath>F:\Program Files (x86)\Steam\steamapps\common\Stardew Valley</Gamepath>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Lib.Harmony" Version="2.3.6" />
+		<PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" />
+	</ItemGroup>
 
 </Project>
